@@ -1,0 +1,48 @@
+name:                nylon
+version:             0.1.0.0
+#synopsis:
+#description:
+homepage:            https://github.com/TheDrawingCoding-Gamer/nylon#readme
+license:             BSD3
+author:              bulby
+maintainer:          bulbyvr@gmail.com
+copyright:           2021 BulbyVR
+category:            Web
+extra-source-files:
+- README.md
+dependencies:
+  - base >= 4.7 && < 5
+  - megaparsec >= 9.2 && < 9.3
+  - text
+  - containers
+  - aeson
+  - generic-data
+  - polysemy
+  - typed-process
+  - bytestring
+  - directory
+  - req
+  - req-conduit
+  - conduit
+  - conduit-extra
+  - unordered-containers
+  - hashable
+  - base64
+default-extensions: 
+  - ImportQualifiedPost
+  - LambdaCase
+  - OverloadedStrings
+  - DataKinds
+  - FlexibleContexts
+  - GADTs
+  - LambdaCase
+  - PolyKinds
+  - RankNTypes
+  - ScopedTypeVariables
+  - TypeApplications
+  - TypeOperators
+  - TypeFamilies
+executables:
+  nylon:
+    source-dirs:      src
+    main:             Main.hs
