@@ -64,7 +64,7 @@ serializeItem = \case
     HStringMap i -> "b" <> M.foldlWithKey' (\a k v -> a <> serializeItem (HString k) <> serializeItem v) "" i <> "h"
     HIntMap    i -> "q" <> M.foldlWithKey' (\a k v -> a <> ":" <> T.pack (show k) <> serializeItem v) "" i <> "h"
     HObjectMap i -> "M" <> HM.foldlWithKey' (\a k v -> a <> serializeItem k <> serializeItem v) "" i <> "h"
-    HBytes b -> let encoded = B64.encodeBase64 b in "s" <> T.pack (show (T.length encoded)) <> ":" <> encoded
+    HBytes b -> let encoded = hxBase64encode b in "s" <> T.pack (show (T.length encoded)) <> ":" <> encoded
     HException x -> "x" <> serializeItem x
     HClass name fields -> "c" <> serializeItem (HString name) <> HM.foldlWithKey' (\a k v -> a <> serializeItem (HString k) <> serializeItem v) "" fields <> "g"
     HEnumName enumName constructor args -> "w" <> serializeItem (HString enumName) <> serializeItem (HString constructor) <> ":" <> T.pack (show (length args)) <> T.concat (map serializeItem args)
