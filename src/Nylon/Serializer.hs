@@ -1,5 +1,11 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Nylon.Serializer where 
+module Nylon.Serializer (
+    HaxeValue(..) 
+    , serialize 
+    , deserialize 
+    , fromNullable
+    , HxDeserialize(..)
+    , HxSerialize(..)) where 
 
 import Polysemy qualified as P
 import Polysemy.State
@@ -39,7 +45,7 @@ data HaxeValue =
     | HEnumIndex T.Text Int [HaxeValue]
     | HCustom T.Text T.Text
     | HVerbatim T.Text -- For internal use only
-    deriving (Generic, Eq)
+    deriving (Generic, Eq, Show)
 instance Hashable HaxeValue
 
 serialize :: [HaxeValue] -> T.Text 
@@ -92,6 +98,7 @@ doNullMagic list =
 deserialize :: Parsec Void T.Text [HaxeValue]
 deserialize = do 
     many deserializeItem
+deserializeItem :: Parsec Void T.Text HaxeValue
 deserializeItem = do 
     choice 
         [ char 'n' $> HNull
@@ -111,7 +118,7 @@ deserializeItem = do
         , char 'b' *> ((M.fromList <$> many parseNameValue) <&> HStringMap) <* char 'h'
         , char 'q' *> ((M.fromList <$> many parseIntValue ) <&> HIntMap   ) <* char 'h'
         , char 'M' *> ((HM.fromList <$> many parseKeyValue) <&> HObjectMap) <* char 'h'
-        , char 's'  *> parseBytes <&> HBytes
+        , char 's' *> parseBytes <&> HBytes
         , char 'x' *> deserializeItem <&> HException
         , char 'c' *> parseClass <* char 'h'
         , char 'w' *> fail "i'm tired"
@@ -175,3 +182,13 @@ parseCustom = do
     HString name <- deserializeItem 
     blah <- manyTill anySingle (single 'g')
     pure $ HCustom name (T.pack blah)
+
+fromNullable :: HaxeValue -> Maybe HaxeValue 
+fromNullable HNull = Nothing
+fromNullable x = Just x
+
+class HxSerialize x where 
+    hxSerialize :: x -> [HaxeValue]
+class HxDeserialize x where 
+    hxDeserialize :: [HaxeValue] -> x
+

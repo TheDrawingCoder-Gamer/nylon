@@ -5,6 +5,7 @@ import Network.HTTP.Req
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Bifunctor qualified as BF
+import Control.Category ((>>>))
 data CheckLevel 
     = NoCheck
     | CheckSyntax
@@ -42,6 +43,6 @@ remotingUrl si@ServerInfo{..} =
     addJunk <$> siteUrl si
     where
     addJunk :: Url a -> Url a
-    addJunk = (/: "api") . (/: siApiVersion) . (/: siUrl)
+    addJunk = (/: "api") >>> (/: siApiVersion) >>> (/: siUrl)
 repository :: Text
 repository = "files/3.0"

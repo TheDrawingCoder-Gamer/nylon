@@ -23,6 +23,7 @@ executable nylon
       Nylon.Data
       Nylon.HaxelibJson
       Nylon.Installer
+      Nylon.MetaData
       Nylon.SemVer
       Nylon.Serializer
       Nylon.Vcs
@@ -54,6 +55,7 @@ executable nylon
     , directory
     , generic-data
     , hashable
+    , http-client
     , megaparsec ==9.2.*
     , polysemy
     , req

@@ -29,6 +29,7 @@ dependencies:
   - hashable
   - base64
   - uri-encode
+  - http-client
 default-extensions: 
   - ImportQualifiedPost
   - LambdaCase

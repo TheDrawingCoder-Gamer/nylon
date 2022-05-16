@@ -8,6 +8,8 @@ import Data.String (IsString)
 import Data.Aeson (FromJSON(..), (.:), withText)
 import Data.Text (Text)
 import Data.Void
+import Nylon.Serializer
+import Data.Maybe (fromJust)
 data Preview 
     = Alpha
     | Beta
@@ -19,14 +21,16 @@ data SemVer = SemVer
     , semPatch :: Int
     , semPreview :: Maybe Preview
     , previewNum :: Maybe Int }
+    deriving (Eq, Show, Ord)
 type Parser = Parsec Void Text
+
 instance FromJSON SemVer where 
     parseJSON = withText "SemVer" $ \v -> case parse parseSemVer "-" v of  
                                                 Left e -> 
                                                     fail $ errorBundlePretty (e :: ParseErrorBundle Text Void)  
                                                 Right p -> 
                                                     pure p
-parseSemVer :: (MonadParsec e s m, Token s ~ Char, IsString (Tokens s)) => m SemVer 
+parseSemVer :: Parser SemVer 
 parseSemVer = do
     major <- parserSaneNumber
     char '.'
@@ -54,3 +58,8 @@ parserSaneNumber = choice
         first <- satisfy (\x -> x /= '0' && isDigit x)
         rest <- many digitChar 
         pure (first:rest)] <?> "a natural number, including zero"
+
+instance HxDeserialize SemVer where 
+    hxDeserialize [HString s] = 
+        fromJust (parseMaybe parseSemVer s :: Maybe SemVer)
+    hxDeserialize _ = error "invalid semver" 

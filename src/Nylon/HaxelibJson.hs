@@ -1,7 +1,10 @@
 {-# LANGUAGE DeriveGeneric, DerivingVia, GeneralizedNewtypeDeriving #-}
 module Nylon.HaxelibJson 
     (ProjectName,
-    unProjectName) where 
+    unProjectName,
+    toProjectName,
+    License(..),
+    HaxelibJson(..)) where 
 
 import Data.Text qualified as T
 import Data.Char (isDigit, isAscii, isLetter)

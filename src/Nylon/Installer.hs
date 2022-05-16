@@ -3,12 +3,21 @@ module Nylon.Installer where
 import Network.HTTP.Req
 import Network.HTTP.Req.Conduit
 import Nylon.Data
+import Nylon.HaxelibJson
+import Nylon.MetaData
+import Nylon.Serializer
 import System.IO
 import Data.Text (Text, unpack)
 import Data.Conduit ((.|), runConduitRes)
 import Data.Conduit.Binary qualified as CB
 import Data.String
 import Data.Bifunctor qualified as BF
+import Data.ByteString qualified as B
+import Data.ByteString.Char8 qualified as BC
+import Data.HashMap.Strict qualified as HM
+import Data.Text qualified as T
+import Network.HTTP.Client qualified as HC
+import Text.Megaparsec (parse, errorBundlePretty)
 hxDownload :: ServerInfo -> Text -> String ->  IO ()
 hxDownload remote filename outPath = do 
     let fileUrl = BF.bimap addOtherThings addOtherThings $ siteUrl remote
@@ -32,4 +41,24 @@ hxDownload remote filename outPath = do
             if fileSize > 0 then 
                 header "range" ("bytes=" <> fromString (show fileSize) <> "-") 
             else mempty
-        
+hxInfos :: ServerInfo -> ProjectName -> IO (Either [HaxeValue] ProjectInfos)
+hxInfos remote project = do 
+    let remoteUrl = remotingUrl remote
+    runReq defaultHttpConfig $ eitherToReq remoteUrl 
+    where 
+        request :: Url a -> Req (Either [HaxeValue] ProjectInfos)
+        request url = 
+            reqBr GET url NoReqBody (("__x" =: serialize [HArray [HString "api", HString "infos"], HArray [HString $ unProjectName project]]) <> header "X-Haxe-Remoting" "1") $ \r -> do
+                res <- B.drop 3 . B.concat <$> HC.brConsume (HC.responseBody r)
+                let maybeStruct = parse deserialize "my attic" (T.pack . BC.unpack $ res)
+                case maybeStruct of 
+                    Right x@[HStructure _]-> 
+                        pure $ Right $ hxDeserialize x 
+                    Right x -> 
+                        pure $ Left x
+                    Left e -> 
+                        pure $ Left [HException (HString (T.pack $ errorBundlePretty e))]
+        eitherToReq :: Either (Url a) (Url b) -> Req (Either [HaxeValue] ProjectInfos)
+        eitherToReq = \case 
+            Left a -> request a
+            Right a -> request a
