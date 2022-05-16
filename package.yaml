@@ -28,6 +28,7 @@ dependencies:
   - unordered-containers
   - hashable
   - base64
+  - uri-encode
 default-extensions: 
   - ImportQualifiedPost
   - LambdaCase

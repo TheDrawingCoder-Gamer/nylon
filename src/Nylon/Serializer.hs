@@ -9,10 +9,16 @@ import Data.Hashable
 import Data.ByteString qualified as B
 import GHC.Generics (Generic)
 import Text.Megaparsec
+import Text.Megaparsec.Char
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.List (groupBy)
 import Data.List qualified as L
 import Data.ByteString.Base64 qualified as B64
+import Data.Char (isDigit)
+import Data.Void
+import Data.Functor (($>), (<&>))
+import Network.URI.Encode
 data HaxeValue = 
     HNull 
     | HInt Int
@@ -27,7 +33,7 @@ data HaxeValue =
     | HIntMap    (M.Map Int HaxeValue) -- TODO: Strongly type haxe maps
     | HObjectMap (HM.HashMap HaxeValue HaxeValue)
     | HBytes B.ByteString
-    | HException T.Text
+    | HException HaxeValue
     | HClass T.Text (HM.HashMap T.Text HaxeValue)
     | HEnumName T.Text T.Text [HaxeValue]
     | HEnumIndex T.Text Int [HaxeValue]
@@ -50,7 +56,7 @@ serializeItem = \case
     HFloat f -> "d" <> T.pack (show f)
     HBool True -> "t" 
     HBool False -> "f"
-    HString s -> "y" <> T.pack (show (T.length s)) <> ":" <> s
+    HString s -> let encoded  = encodeText s in "y" <> T.pack (show (T.length encoded)) <> ":" <> encoded
     HList i -> let items = T.concat $ map serializeItem i in "l" <> items <> "h"
     HArray i -> let items =  T.concat $ map serializeItem $ doNullMagic i in "a" <> items <> "h"
     HDate s -> "v" <> s
@@ -59,7 +65,7 @@ serializeItem = \case
     HIntMap    i -> "q" <> M.foldlWithKey' (\a k v -> a <> ":" <> T.pack (show k) <> serializeItem v) "" i <> "h"
     HObjectMap i -> "M" <> HM.foldlWithKey' (\a k v -> a <> serializeItem k <> serializeItem v) "" i <> "h"
     HBytes b -> let encoded = B64.encodeBase64 b in "s" <> T.pack (show (T.length encoded)) <> ":" <> encoded
-    HException x -> "x" <> serializeItem (HString x)
+    HException x -> "x" <> serializeItem x
     HClass name fields -> "c" <> serializeItem (HString name) <> HM.foldlWithKey' (\a k v -> a <> serializeItem (HString k) <> serializeItem v) "" fields <> "g"
     HEnumName enumName constructor args -> "w" <> serializeItem (HString enumName) <> serializeItem (HString constructor) <> ":" <> T.pack (show (length args)) <> T.concat (map serializeItem args)
     HEnumIndex enumName idx args -> "j" <> serializeItem (HString enumName) <> ":" <> T.pack (show idx) <> ":" <> T.pack (show (length args)) <> T.concat (map serializeItem args)
@@ -82,4 +88,90 @@ doNullMagic list =
         replaceNulls [x] = [x]
         replaceNulls ls = 
             L.singleton $ HVerbatim $ "u" <> T.pack (show (length ls))
-            
+
+deserialize :: Parsec Void T.Text [HaxeValue]
+deserialize = do 
+    many deserializeItem
+deserializeItem = do 
+    choice 
+        [ char 'n' $> HNull
+        , char 'z' $> HInt 0
+        , char 'i' *> parseInt <&> HInt
+        , char 'k' $> HFloat (0/0)
+        , char 'm' $> HFloat (-1/0)
+        , char 'p' $> HFloat (1/0)
+        , char 'd' *> parseFloat <&> HFloat
+        , char 't' $> HBool True
+        , char 'f' $> HBool False
+        , char 'y' *> parseString <&> HString
+        , char 'o' *>  ((HM.fromList <$> many parseNameValue) <&> HStructure) <* char 'g'
+        , char 'l' *> (many deserializeItem <&> HList) <* char 'h'
+        , char 'a' *> ((concat <$> many deserializeArrayItem) <&> HArray) <* char 'h'
+        , char 'v' *> fail "i'm tired"
+        , char 'b' *> ((M.fromList <$> many parseNameValue) <&> HStringMap) <* char 'h'
+        , char 'q' *> ((M.fromList <$> many parseIntValue ) <&> HIntMap   ) <* char 'h'
+        , char 'M' *> ((HM.fromList <$> many parseKeyValue) <&> HObjectMap) <* char 'h'
+        , char 's'  *> parseBytes <&> HBytes
+        , char 'x' *> deserializeItem <&> HException
+        , char 'c' *> parseClass <* char 'h'
+        , char 'w' *> fail "i'm tired"
+        , char 'j' *> fail "i'm tired"
+        , char 'C' *> parseCustom
+        ] 
+deserializeArrayItem =
+    choice 
+        [ L.singleton <$> deserializeItem
+        , char 'u' *> parseInt <&> flip replicate HNull ]
+parseInt :: Parsec Void T.Text Int 
+parseInt = do 
+    sign <- optional $ char '-' 
+    int <- some (satisfy isDigit) 
+    case sign of 
+        Just _ -> pure $ read int * (-1) 
+        Nothing -> pure $ read int
+parseFloat :: Parsec Void T.Text Float 
+parseFloat = do 
+    float <- some (satisfy (\c -> isDigit c || c == '.' || c == '+' || c == '-' || c == ',')) 
+    pure $ read float
+parseString :: Parsec Void T.Text T.Text 
+parseString = do 
+    num <- read <$> some (satisfy isDigit) 
+    char ':'
+    decodeText . T.pack <$> count num anySingle 
+
+parseKeyValue :: Parsec Void T.Text (HaxeValue, HaxeValue)
+parseKeyValue = (,)
+    <$> deserializeItem 
+    <*> deserializeItem
+parseNameValue :: Parsec Void T.Text (T.Text, HaxeValue)
+parseNameValue = do 
+    (HString key, value) <- parseKeyValue
+    pure (key, value)
+parseIntValue :: Parsec Void T.Text (Int, HaxeValue) 
+parseIntValue = do 
+    char ':'
+    num <- read <$> some (satisfy isDigit)
+    item <- deserializeItem 
+    pure (num, item)
+parseBytes :: Parsec Void T.Text B.ByteString 
+parseBytes = do 
+    c <- read <$> some (satisfy isDigit)
+    char ':' 
+    chars <- T.pack <$> count c anySingle
+    case hxBase64decode chars of 
+        Left e -> fail $ T.unpack e 
+        Right a -> pure a
+parseClass :: Parsec Void T.Text HaxeValue 
+parseClass = do 
+    HString name <- deserializeItem 
+    fields <- HM.fromList <$> many parseNameValue
+    pure $ HClass name fields
+hxBase64encode :: B.ByteString -> T.Text
+hxBase64encode = T.replace "+" "%" . T.replace "/" ":" . B64.encodeBase64
+hxBase64decode :: T.Text -> Either T.Text B.ByteString
+hxBase64decode = B64.decodeBase64 . TE.encodeUtf8 . T.replace "%" "+" . T.replace ":" "/"
+parseCustom :: Parsec Void T.Text HaxeValue  
+parseCustom = do 
+    HString name <- deserializeItem 
+    blah <- manyTill anySingle (single 'g')
+    pure $ HCustom name (T.pack blah)
