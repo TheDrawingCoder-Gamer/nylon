@@ -5,6 +5,8 @@ import Nylon.Serializer
 import Nylon.SemVer
 import Data.HashMap.Strict qualified as HM
 import Data.List qualified as L
+import Data.Functor ((<&>))
+import Debug.Trace
 data ProjectInfos = ProjectInfos
     { pjname        :: T.Text
     , pjdescription :: T.Text
@@ -24,8 +26,8 @@ data VersionInfo = VersionInfo
     , vcomments :: T.Text} 
     deriving (Eq, Show)
 data User = User
-    { uname :: T.Text
-    , ufullName :: T.Text }
+    { uname :: Maybe T.Text
+    , ufullName :: Maybe T.Text }
     deriving (Eq, Show)
 data FullUser = FullUser 
     {funame :: T.Text
@@ -35,39 +37,42 @@ data FullUser = FullUser
     deriving (Eq, Show)
 
 instance HxDeserialize User where 
-    hxDeserialize [HStructure fields] = 
+    hxDeserialize [HStructure fields'] = 
         let 
-            (HString name) = fields HM.! "name" 
-            (HString fullName) = fields HM.! "fullname" 
+            fields = HM.fromList fields'
+            name = (fields HM.!? HString "name") >>= fromNullable >>= (\(HString x) -> Just x) 
+            fullName = fields HM.!? HString "fullname" >>= fromNullable >>= (\(HString x) -> Just x)
         in 
             User name fullName
     hxDeserialize _ = error "Invalid User"
 instance HxDeserialize VersionInfo where 
-    hxDeserialize [HStructure fields] = 
+    hxDeserialize [HStructure fields'] = 
         let 
-            (HString date) = fields HM.! "date" 
-            name = hxDeserialize [fields HM.! "name"]
-            (HInt downloads) = fields HM.! "downloads"
-            (HString comments) = fields HM.! "comments"
+            fields = HM.fromList fields'
+            (HString date) = fields HM.! HString "date" 
+            name = hxDeserialize [fields HM.! HString "name"]
+            (HInt downloads) = fields HM.! HString "downloads"
+            (HString comments) = fields HM.! HString "comments"
         in 
             VersionInfo date name downloads comments
     hxDeserialize _ = error "bad version info"
 
 instance HxDeserialize ProjectInfos where 
-    hxDeserialize [HStructure fields] = 
+    hxDeserialize [HStructure fields'] = 
         let 
-            (HString name) = fields HM.! "name" 
-            (HString desc) = fields HM.! "desc"
-            (HString web)  = fields HM.! "website"
-            (HString owner)= fields HM.! "owner"
-            (HArray contributors') = fields HM.! "contributors"
+            fields = HM.fromList fields'
+            (HString name) = fields HM.! HString "name" 
+            (HString desc) = fields HM.! HString "desc"
+            (HString web)  = fields HM.! HString "website"
+            (HString owner)= fields HM.! HString "owner"
+            (HArray contributors') = fields HM.! HString "contributors"
             contributors = map (hxDeserialize @User . L.singleton) contributors'
-            (HString license) = fields HM.! "license"
-            curver  = fromNullable (fields HM.! "curversion") >>= (\(HString x) -> Just x)
-            (HInt downloads) = fields HM.! "downloads"
-            (HArray versions') = fields HM.! "versions"
+            (HString license) = fields HM.! HString "license"
+            curver  = fields HM.!? HString "curversion" >>= fromNullable >>= (\(HString x) -> Just x)
+            (HInt downloads) = fields HM.! HString "downloads"
+            (HArray versions') = fields HM.! HString "versions"
             versions = map (hxDeserialize @VersionInfo . L.singleton) versions'
-            (HList tags') = fields HM.! "tags"
+            (HList tags') = fields HM.! HString "tags"
             tags = map (\(HString s) -> s) tags'
         in 
             ProjectInfos 
