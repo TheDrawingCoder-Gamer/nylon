@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Nylon.MetaData where 
 
 import Data.Text qualified as T
@@ -7,6 +8,8 @@ import Data.HashMap.Strict qualified as HM
 import Data.List qualified as L
 import Data.Functor ((<&>))
 import Debug.Trace
+import Data.Ord (Down(..))
+import Data.Maybe (isNothing, isJust)
 data ProjectInfos = ProjectInfos
     { pjname        :: T.Text
     , pjdescription :: T.Text
@@ -25,6 +28,8 @@ data VersionInfo = VersionInfo
     , vdownloads :: Int 
     , vcomments :: T.Text} 
     deriving (Eq, Show)
+instance Ord VersionInfo where 
+    compare VersionInfo{vname=v1} VersionInfo{vname=v2} = compare v1 v2
 data User = User
     { uname :: Maybe T.Text
     , ufullName :: Maybe T.Text }
@@ -35,7 +40,17 @@ data FullUser = FullUser
     ,fuemail :: T.Text
     , fuprojects :: [T.Text] }
     deriving (Eq, Show)
-
+getLatestWith :: (SemVer -> Bool) -> ProjectInfos -> Maybe SemVer 
+getLatestWith doPreview ProjectInfos{..} 
+    | null pjversions = Nothing
+    | otherwise = 
+       vname <$> headMaybe (dropWhile (not . doPreview . vname) $ map getDown (L.sort (map Down pjversions)))
+getLatest :: ProjectInfos -> Maybe SemVer 
+getLatest = getLatestWith (isNothing . semPreview)
+headMaybe ls
+    | null ls = Nothing
+    | otherwise = Just $ head ls
+    
 instance HxDeserialize User where 
     hxDeserialize [HStructure fields'] = 
         let 
@@ -89,4 +104,4 @@ instance HxDeserialize ProjectInfos where
     hxDeserialize _ = 
         error "invalid ProjectInfos"
 
-    
+ 

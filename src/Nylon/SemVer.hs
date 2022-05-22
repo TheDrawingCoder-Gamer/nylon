@@ -1,12 +1,13 @@
-{-# LANGUAGE TypeApplications, GADTs, OverloadedStrings, FlexibleContexts #-}
+{-# LANGUAGE TypeApplications, GADTs, OverloadedStrings, FlexibleContexts, RecordWildCards #-}
 module Nylon.SemVer where 
 
-import Data.Char (isDigit)
+import Data.Char (isDigit, toLower)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import Data.String (IsString)
 import Data.Aeson (FromJSON(..), (.:), withText)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Void
 import Nylon.Serializer
 import Data.Maybe (fromJust)
@@ -58,7 +59,17 @@ parserSaneNumber = choice
         first <- satisfy (\x -> x /= '0' && isDigit x)
         rest <- many digitChar 
         pure (first:rest)] <?> "a natural number, including zero"
-
+prettySemVer :: SemVer -> T.Text
+prettySemVer SemVer{..} = 
+    T.pack (show semMajor) <> "." <> T.pack (show semMinor) <> "." <> T.pack (show semPatch) <>
+        case semPreview of 
+            Just s -> 
+                "-" <> T.toLower (T.pack (show s)) <> 
+                    case previewNum of 
+                        Just n -> 
+                            "." <> T.pack (show n) 
+                        Nothing -> ""
+            Nothing -> ""
 instance HxDeserialize SemVer where 
     hxDeserialize [HString s] = 
         fromJust (parseMaybe parseSemVer s :: Maybe SemVer)

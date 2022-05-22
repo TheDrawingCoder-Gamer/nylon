@@ -12,4 +12,4 @@ main = do
       Left e -> 
          TIO.putStrLn e
       Right h -> 
-         print h
+         TIO.putStrLn $ prettyHaxeInfo h

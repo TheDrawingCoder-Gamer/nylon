@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Nylon.Installer where 
 
 import Network.HTTP.Req
@@ -6,6 +7,7 @@ import Nylon.Data
 import Nylon.HaxelibJson
 import Nylon.MetaData
 import Nylon.Serializer
+import Nylon.SemVer
 import System.IO
 import Data.Text (Text, unpack)
 import Data.Conduit ((.|), runConduitRes)
@@ -62,3 +64,17 @@ hxInfos remote project = do
         eitherToReq = \case 
             Left a -> request a
             Right a -> request a
+
+prettyHaxeInfo :: ProjectInfos -> T.Text
+prettyHaxeInfo infos@ProjectInfos{..} = 
+    "Name: " <> pjname <> "\n" 
+    <> "Tags: " <> T.intercalate ", " pjtags <> "\n"
+    <> "Desc: " <> pjdescription <> "\n"
+    <> "Website: " <> pjwebsite <> "\n"
+    <> "License: " <> pjlicense <> "\n"
+    <> "Owner: " <> pjowner <> "\n"
+    <> "Version: " <> maybe "(no version released)" prettySemVer (getLatest infos) <> "\n" 
+    -- TODO: Pretty print instead of showing
+    <> "Releases: \n" <> T.intercalate "\n" (map (\VersionInfo{..} -> vdate <> " " <> prettySemVer vname <> " : " <> vcomments) pjversions) <> "\n"
+
+
