@@ -11,6 +11,7 @@ import Data.Text qualified as T
 import Data.Void
 import Nylon.Serializer
 import Data.Maybe (fromJust)
+import Data.Bifunctor qualified as BFu
 data Preview 
     = Alpha
     | Beta
@@ -72,5 +73,5 @@ prettySemVer SemVer{..} =
             Nothing -> ""
 instance HxDeserialize SemVer where 
     hxDeserialize [HString s] = 
-        fromJust (parseMaybe parseSemVer s :: Maybe SemVer)
-    hxDeserialize _ = error "invalid semver" 
+        BFu.first (T.pack . errorBundlePretty) (parse parseSemVer "my attic" s)
+    hxDeserialize _ = Left "invalid semver" 

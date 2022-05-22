@@ -8,6 +8,8 @@ author:              bulby
 maintainer:          bulbyvr@gmail.com
 copyright:           2021 BulbyVR
 category:            Web
+ghc-options: 
+- -fplugin=Polysemy.Plugin
 extra-source-files:
 - README.md
 dependencies:
@@ -30,7 +32,9 @@ dependencies:
   - base64
   - uri-encode
   - http-client
-default-extensions: 
+  - polysemy-plugin
+  - zip-archive
+default-extensions:
   - ImportQualifiedPost
   - LambdaCase
   - OverloadedStrings

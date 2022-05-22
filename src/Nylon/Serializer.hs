@@ -127,9 +127,9 @@ deserializeItem = do
         , char 's' *> parseBytes <&> HBytes
         , char 'x' *> deserializeItem <&> HException
         , char 'c' *> parseClass
-        , char 'w' *> fail "i'm tired"
-        , char 'j' *> fail "i'm tired"
-        , char 'C' *> fail "can't possibly know how to parse"
+        , char 'w' *> fail "Enums are unimplemented"
+        , char 'j' *> fail "Enums are unimplemented"
+        , char 'C' *> fail "Custom data is impossible to parse"
         , char 'R' *> parseInt <&> HStrCache
         , char 'r' *> parseInt <&> HCache
         ] 
@@ -252,26 +252,25 @@ parseBytes = do
         Left e -> fail $ T.unpack e 
         Right a -> pure a
 parseClass :: Parsec Void T.Text HaxeValue 
-parseClass = do 
-    name <- deserializeItem 
-    fields <- manyTill parseKeyValue (char 'g')
-    pure $ HClass name fields
+parseClass = HClass 
+    <$> deserializeItem
+    <*> manyTill parseKeyValue (char 'g')
 hxBase64encode :: B.ByteString -> T.Text
 hxBase64encode = T.replace "+" "%" . T.replace "/" ":" . B64.encodeBase64
 hxBase64decode :: T.Text -> Either T.Text B.ByteString
 hxBase64decode = B64.decodeBase64 . TE.encodeUtf8 . T.replace "%" "+" . T.replace ":" "/"
 parseCustom :: Parsec Void T.Text HaxeValue  
-parseCustom = do 
-    name <- deserializeItem 
-    blah <- manyTill anySingle (single 'g')
-    pure $ HCustom name (T.pack blah)
+parseCustom = HCustom
+    <$> deserializeItem 
+    <*> (T.pack <$> manyTill anySingle (single 'g'))
+    
 
 fromNullable :: HaxeValue -> Maybe HaxeValue 
 fromNullable HNull = Nothing
 fromNullable x = Just x
 
 class HxSerialize x where 
-    hxSerialize :: x -> [HaxeValue]
+    hxSerialize :: x -> Either T.Text [HaxeValue]
 class HxDeserialize x where 
-    hxDeserialize :: [HaxeValue] -> x
+    hxDeserialize :: [HaxeValue] -> Either T.Text x
 

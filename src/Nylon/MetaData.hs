@@ -10,6 +10,9 @@ import Data.Functor ((<&>))
 import Debug.Trace
 import Data.Ord (Down(..))
 import Data.Maybe (isNothing, isJust)
+import Polysemy qualified as P
+import Polysemy.Error qualified as P
+import Polysemy.Fail qualified as P
 data ProjectInfos = ProjectInfos
     { pjname        :: T.Text
     , pjdescription :: T.Text
@@ -57,50 +60,59 @@ instance HxDeserialize User where
             fields = HM.fromList fields'
             name = (fields HM.!? HString "name") >>= fromNullable >>= (\(HString x) -> Just x) 
             fullName = fields HM.!? HString "fullname" >>= fromNullable >>= (\(HString x) -> Just x)
-        in 
-            User name fullName
-    hxDeserialize _ = error "Invalid User"
+        in
+            -- Given user has no required fields, it will always succeed
+            Right $ User name fullName
+    hxDeserialize _ = Left "Invalid User"
 instance HxDeserialize VersionInfo where 
     hxDeserialize [HStructure fields'] = 
-        let 
-            fields = HM.fromList fields'
-            (HString date) = fields HM.! HString "date" 
-            name = hxDeserialize [fields HM.! HString "name"]
-            (HInt downloads) = fields HM.! HString "downloads"
-            (HString comments) = fields HM.! HString "comments"
-        in 
-            VersionInfo date name downloads comments
-    hxDeserialize _ = error "bad version info"
+        P.run $ P.runError $ P.failToError T.pack polysemyHelp
+        where 
+            polysemyHelp :: P.Sem [P.Fail, P.Error T.Text] VersionInfo 
+            polysemyHelp = do 
+                let fields = HM.fromList fields' 
+                (HString date) <- P.note "Missing required field (date)" (fields HM.!? HString "date") 
+                nameField <- P.note "Missing required field (name)" (fields HM.!? HString "name")
+                name <- P.fromEither $ hxDeserialize [nameField]
+                (HInt downloads) <- P.note "Missing required field (downloads)" (fields HM.!? HString "downloads")
+                (HString comments) <- P.note "Missing required field (comments)" (fields HM.!? HString "comments") 
+                pure $ VersionInfo date name downloads comments
+    hxDeserialize _ = Left "bad version info"
 
 instance HxDeserialize ProjectInfos where 
     hxDeserialize [HStructure fields'] = 
-        let 
-            fields = HM.fromList fields'
-            (HString name) = fields HM.! HString "name" 
-            (HString desc) = fields HM.! HString "desc"
-            (HString web)  = fields HM.! HString "website"
-            (HString owner)= fields HM.! HString "owner"
-            (HArray contributors') = fields HM.! HString "contributors"
-            contributors = map (hxDeserialize @User . L.singleton) contributors'
-            (HString license) = fields HM.! HString "license"
-            curver  = fields HM.!? HString "curversion" >>= fromNullable >>= (\(HString x) -> Just x)
-            (HInt downloads) = fields HM.! HString "downloads"
-            (HArray versions') = fields HM.! HString "versions"
-            versions = map (hxDeserialize @VersionInfo . L.singleton) versions'
-            (HList tags') = fields HM.! HString "tags"
-            tags = map (\(HString s) -> s) tags'
-        in 
-            ProjectInfos 
-                name 
-                desc
-                web 
-                owner 
-                contributors
-                license
-                curver
-                downloads
-                tags
-                versions
+        P.run $ P.runError $ P.failToError T.pack helper
+        where 
+            helper :: P.Sem [P.Fail, P.Error T.Text] ProjectInfos
+            helper = do 
+                let fields = HM.fromList fields' 
+                (HString name) <- P.note "Missing required field (name)" (fields HM.!? HString "name") 
+                (HString desc) <- P.note "Missing required field (desc)" (fields HM.!? HString "desc")
+                (HString web ) <- P.note "Missing required field (website)" (fields HM.!? HString "website")
+                (HString owner) <- P.note "Missing required field (owner)" (fields HM.!? HString "owner")  
+                (HArray contributors') <- P.note "Missing required field (contributors)" (fields HM.!? HString "contributors")
+                contributors <- mapM (P.fromEither . hxDeserialize @User . L.singleton) contributors'
+                (HString license) <- P.note "Missing required field (license)" (fields HM.!? HString "license")
+                let curver = fields HM.!? HString "curversion" >>= fromNullable >>= (\(HString x) -> Just x)
+                (HInt downloads) <- P.note "Missing required field (downloads)" (fields HM.!? HString "downloads")
+                (HArray versions') <- P.note "Missing required field (versions)" (fields HM.!? HString "versions")
+                versions <- mapM (P.fromEither . hxDeserialize @VersionInfo . L.singleton) versions'
+                (HList tags') <- P.note "Missing required field (tags)" (fields HM.!? HString "tags") 
+                let tags = map (\(HString s) -> s) tags'
+                pure $ ProjectInfos
+                    name
+                    desc
+                    web
+                    owner
+                    contributors
+                    license
+                    curver
+                    downloads
+                    tags
+                    versions
+
+
+
     hxDeserialize _ = 
         error "invalid ProjectInfos"
 
