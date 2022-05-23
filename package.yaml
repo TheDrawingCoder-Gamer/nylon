@@ -33,7 +33,8 @@ dependencies:
   - uri-encode
   - http-client
   - polysemy-plugin
-  - zip-archive
+  - zip
+  - cmdargs
 default-extensions:
   - ImportQualifiedPost
   - LambdaCase

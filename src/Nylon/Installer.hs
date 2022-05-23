@@ -27,17 +27,20 @@ import Control.Category ((>>>))
 import Text.Megaparsec (parse, errorBundlePretty)
 import Codec.Archive.Zip qualified as Z
 import Data.Char (isDigit, isLetter)
+import Debug.Trace
+import System.Directory (removeFile)
 hxDownload :: ServerInfo -> T.Text -> String ->  IO ()
 hxDownload remote filename outPath = do 
     let fileUrl = BF.bimap addOtherThings addOtherThings $ siteUrl remote
-    
     
     case fileUrl of 
         Left a -> 
             runReq defaultHttpConfig $ request mempty a
         Right a -> 
             runReq defaultHttpConfig $ request mempty a
-    
+    Z.withArchive (outPath <> ".zip") $ do 
+        Z.unpackInto outPath
+    removeFile (outPath <> ".zip")
     where
         addRepo :: Url a -> Url a
         addRepo x = foldl (/:) x (T.splitOn "/" repository)
@@ -46,10 +49,7 @@ hxDownload remote filename outPath = do
         request :: Option a -> Url a -> Req () 
         request optionals url = 
             reqBr GET url NoReqBody optionals $ \r ->
-                runConduitRes $ responseBodySource r .| do 
-                    bs <- C.sinkLazy
-                    let archive = Z.toArchive bs 
-                    liftIO $ Z.extractFilesFromArchive [Z.OptDestination outPath] archive
+                runConduitRes $ responseBodySource r .| CB.sinkFile (outPath <> ".zip")
                     
         goodHeader :: Integer -> Option a 
         goodHeader fileSize = 

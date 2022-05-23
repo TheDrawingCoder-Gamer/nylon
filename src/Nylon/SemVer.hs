@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeApplications, GADTs, OverloadedStrings, FlexibleContexts, RecordWildCards #-}
+{-# LANGUAGE TypeApplications, GADTs, OverloadedStrings, FlexibleContexts, RecordWildCards, DeriveDataTypeable #-}
 module Nylon.SemVer where 
 
 import Data.Char (isDigit, toLower)
@@ -12,19 +12,20 @@ import Data.Void
 import Nylon.Serializer
 import Data.Maybe (fromJust)
 import Data.Bifunctor qualified as BFu
+import Data.Data
 data Preview 
     = Alpha
     | Beta
     | RC
-    deriving (Eq, Ord, Enum, Bounded, Show)
+    deriving (Eq, Ord, Enum, Bounded, Show, Data, Typeable)
 data SemVer = SemVer 
     { semMajor :: Int
     , semMinor :: Int
     , semPatch :: Int
     , semPreview :: Maybe Preview
     , previewNum :: Maybe Int }
-    deriving (Eq, Show, Ord)
-type Parser = Parsec Void Text
+    deriving (Eq, Show, Ord, Data, Typeable)
+
 
 instance FromJSON SemVer where 
     parseJSON = withText "SemVer" $ \v -> case parse parseSemVer "-" v of  
@@ -32,7 +33,7 @@ instance FromJSON SemVer where
                                                     fail $ errorBundlePretty (e :: ParseErrorBundle Text Void)  
                                                 Right p -> 
                                                     pure p
-parseSemVer :: Parser SemVer 
+parseSemVer :: (MonadParsec Void s m, Token s ~ Char, IsString (Tokens s)) => m SemVer
 parseSemVer = do
     major <- parserSaneNumber
     char '.'
